@@ -96,11 +96,61 @@ outShowRowLoop:
     jalr zero, ra, 0
 
 # ----------------------------------------
+# Subroutine rgb888_to_rgb565
+# a0 - Image to convert
+# a1 - Width of the image
+# a2 - Height of the image
+# a3 - Destination buffer
 
 rgb888_to_rgb565:
-# ----------------------------------------
-# Write your code here.
-# You may move the "return" instruction (jalr zero, ra, 0).
-    jalr zero, ra, 0
-
-
+    beq a1, zero, convertExit # If either dimension is 0 exit
+    beq a2, zero, convertExit
+    addi t6, zero, 0x0001     # Detect Endianness
+    sh t6, 0(a3)              # Store 0x0001 in the buffer (a1,a2 != 0)
+    lbu t6, 0(a3)             # Load the first byte (0 for Big, 1 for Little)
+convertRow:
+    add t2, a1, zero          # Reset Counter (I'm using t2 and a2)
+convertPixel:
+    lw t0, 0(a0)              # Get a Pixel as 3 bytes (+1 byte of garbage)
+    bne t6, zero, pixel_888_to_565_little # Select Algorithm
+pixel_888_to_565_big:
+    addi t3, zero, 0b11111000 # Create Mask for Blue
+    slli t3, t3, 8            # Move it to the third byte
+    and t1, t0, t3            # Get Blue
+    srli t1, t1, 11           # Move Blue to the LSBs of the 2nd byte
+    
+    slli t3, t3, 16           # Create Mask for Red
+    and t4, t0, t3            # Get Red
+    srli t4, t4, 16           # Move Red to the MSBs of the 1st byte
+    or t1, t1, t4             # Set Red in the Result
+    
+    lui t3, 0b111111000000    # Create Mask for Green
+    and t4, t0, t3            # Get Green
+    srli t4, t4, 13           # Move Green
+    or t1, t1, t4             # Set Green in the Result
+    j storePixel
+pixel_888_to_565_little:
+    addi t3, zero, 0b11111000 # Create Mask for Red
+    and t1, t0, t3            # Get Red
+    slli t1, t1, 8            # Move Red to the MSBs of the 1st byte
+    
+    slli t3, t3, 16           # Create Mask for Blue
+    and t4, t0, t3            # Get Blue
+    srli t4, t4, 19           # Move Blue to the LSBs of the 2nd byte
+    or t1, t1, t4             # Set Blue in the Result
+    
+    addi t3, zero, 0b11111100 # Create Mask for Green
+    slli t3, t3, 8            # Move it to the second byte
+    and t4, t0, t3            # Get Green
+    srli t4, t4, 5            # Move Green
+    or t1, t1, t4             # Set Green in the Result
+storePixel:
+    sh t1, 0(a3)     # Store the Pixel as a half word
+    addi a0, a0, 3   # Move Input to the next Pixel
+    addi a3, a3, 2   # Move Output to the next Pixel
+    addi t2, t2, -1  # Decrement Counter
+    bne t2, zero, convertPixel
+    addi a2, a2, -1  # Decrement Counter
+    bne a2, zero, convertRow
+convertExit:
+    jalr zero, ra, 0 # Exit
